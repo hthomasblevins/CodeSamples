@@ -81,3 +81,58 @@ CREATE VIEW PercentPopulationVaccinated AS
 		ON deat.location = vacc.location
 		and deat.date = vacc.date
 		
+-- For use in Tableau visualization 
+
+-- 1. Calculate total stats for World
+Select SUM(CAST(new_cases as real)) as total_cases
+		, SUM(CAST(new_deaths as real)) as total_deaths
+		, SUM(CAST(new_deaths as real))/SUM(CAST(new_cases as real)) as DeathPerc
+      
+  FROM CovidData.dbo.CovidDeaths
+  WHERE continent <> ''
+
+-- 2. Calc total deaths by continent
+Select location
+	, SUM(cast(new_deaths as real)) as TotalDeathCount
+
+	FROM CovidData.dbo.CovidDeaths
+	WHERE continent = '' 
+	and location not in ('World', 'European Union', 'International')
+	and location not like '%income'
+	
+	GROUP BY location
+	ORDER BY TotalDeathCount desc
+
+
+-- 3. Infection Stats by Location
+SELECT location
+      ,MAX(total_cases) as HighestInfectionCount
+	  ,population
+	  ,MAX(CASE
+			WHEN population = 0 
+			THEN NULL
+			ELSE CAST(total_cases as real)/CAST(population as real)
+			END)
+			as InfectedPerc
+      
+  FROM CovidData.dbo.CovidDeaths
+  GROUP BY location, population
+  ORDER BY InfectedPerc DESC
+
+
+-- 4. Infection Stats by Location by Date
+SELECT location
+	  ,date
+      ,MAX(total_cases) as HighestInfectionCount
+	  ,population
+	  ,MAX(CASE
+			WHEN population = 0 
+			THEN NULL
+			ELSE CAST(total_cases as real)/CAST(population as real)
+			END)
+			as InfectedPerc
+      
+  FROM CovidData.dbo.CovidDeaths
+  GROUP BY location, population, date
+  ORDER BY InfectedPerc DESC
+
