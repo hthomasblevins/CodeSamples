@@ -1,0 +1,25 @@
+//Power Query code for Data Cleansing project
+
+let
+    Source = Sql.Databases("TBLEVINSLEN2022"),
+   HousingData = Source{[Name="HousingData"]}[Data],
+    dbo_NashvilleHousingSource = HousingData{[Schema="dbo",Item="NashvilleHousingSource"]}[Data],
+
+//Changed data type for SaleDate
+    #"Changed Type" = Table.TransformColumnTypes(dbo_NashvilleHousingSource,{{"SaleDate", type date}}),
+
+//Split out the Propery and Owner address data and renamed the columns
+    #"Split Column by Delimiter" = Table.SplitColumn(#"Changed Type", "PropertyAddress", Splitter.SplitTextByDelimiter(",", QuoteStyle.Csv), {"PropertyAddress.1", "PropertyAddress.2"}),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Split Column by Delimiter",{{"PropertyAddress.1", type text}, {"PropertyAddress.2", type text}}),
+    #"Split Column by Delimiter1" = Table.SplitColumn(#"Changed Type1", "OwnerAddress", Splitter.SplitTextByDelimiter(",", QuoteStyle.Csv), {"OwnerAddress.1", "OwnerAddress.2", "OwnerAddress.3"}),
+    #"Changed Type2" = Table.TransformColumnTypes(#"Split Column by Delimiter1",{{"OwnerAddress.1", type text}, {"OwnerAddress.2", type text}, {"OwnerAddress.3", type text}}),
+    #"Renamed Columns" = Table.RenameColumns(#"Changed Type2",{{"PropertyAddress.1", "PropertyAddressStreet"}, {"PropertyAddress.2", "PropertyAddressCity"}, {"OwnerAddress.1", "OwnerAddressStreet"}, {"OwnerAddress.2", "OwnerAddressCity"}, {"OwnerAddress.3", "OwnerAddressState"}}),
+
+//Normalized the SoldAsVacant field to always to "Yes" or "No"   
+    #"Replaced Value" = Table.ReplaceValue(#"Renamed Columns","N","No",Replacer.ReplaceValue,{"SoldAsVacant"}),
+    #"Replaced Value1" = Table.ReplaceValue(#"Replaced Value","Y","Yes",Replacer.ReplaceValue,{"SoldAsVacant"}),
+
+// Remove duplicate rows based on several fields -- Pacel ID, Property Address, Sales Price, Date, and Legal Reference
+    #"Removed Duplicates" = Table.Distinct(#"Replaced Value1", {"ParcelID", "PropertyAddressStreet", "PropertyAddressCity", "SaleDate", "SalePrice", "LegalReference"})
+in
+    #"Removed Duplicates"
