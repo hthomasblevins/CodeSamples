@@ -136,3 +136,64 @@ SELECT location
   GROUP BY location, population, date
   ORDER BY InfectedPerc DESC
 
+
+
+  -- The following additional queries show examples of data manipulation through Update and Delete statements
+  -- Make a copy of current CovidDeaths data for update and delete manipulation
+
+-- Select database to use
+USE CovidData
+
+-- Make a copy of the source table for cleansing
+DROP TABLE IF EXISTS dbo.CovidDeathsCleansed
+SELECT * INTO dbo.CovidDeathsCleansed FROM dbo.CovidDeaths
+GO
+
+SELECT Distinct continent
+FROM CovidData.dbo.CovidDeathsCleansed
+--WHERE continent = ''  
+	--and location IN ('Oceania', 'Europe', 'North America', 'South America', 'Africa', 'Asia')
+
+UPDATE CovidData.dbo.CovidDeathsCleansed
+SET continent = 'Continent'
+WHERE continent = ''  
+	and location IN ('Oceania', 'Europe', 'North America', 'South America', 'Africa', 'Asia')
+
+UPDATE CovidData.dbo.CovidDeathsCleansed
+SET continent = 'World'
+WHERE location = 'World'  
+
+UPDATE CovidData.dbo.CovidDeathsCleansed
+SET continent = 'European Un'
+WHERE location = 'European Union'  
+	
+-- Calculate summary values for all continents
+SELECT continent, location, FORMAT(population,'###,###,###,###.') as Population, FORMAT(SUM(new_cases),'###,###,###,###') as Total_new_cases
+FROM CovidData.dbo.CovidDeathsCleansed
+
+-- Filter out continent and aggregate categories
+GROUP BY continent, location, population
+HAVING population > 100000000 and SUM(new_cases) > 1000000
+ORDER BY SUM(new_cases) DESC
+
+
+-- Delete records that relate to income levels as location
+
+-- Start by validating what will be deleted
+SELECT * 
+FROM dbo.CovidDeathsCleansed
+WHERE location like '%income%'
+
+-- Delete the records
+DELETE FROM dbo.CovidDeathsCleansed
+WHERE location like '%income%'
+
+-- Rerun the aggregate selection
+-- Calculate summary values for all continents
+SELECT continent, location, FORMAT(population,'###,###,###,###.') as Population, FORMAT(SUM(new_cases),'###,###,###,###') as Total_new_cases
+FROM CovidData.dbo.CovidDeathsCleansed
+
+-- Filter out continent and aggregate categories
+GROUP BY continent, location, population
+HAVING population > 100000000 and SUM(new_cases) > 1000000
+ORDER BY SUM(new_cases) DESC
