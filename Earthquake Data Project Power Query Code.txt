@@ -1,0 +1,35 @@
+let
+    // Pull JSON encoded earthquake data from USGS 
+    Source = Json.Document(Web.Contents("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson")),
+    
+    // The following steps convert the JSON data to a table, rows and columns in Power BI
+    #"Converted to Table" = Table.FromRecords({Source}),
+    #"Expanded metadata" = Table.ExpandRecordColumn(#"Converted to Table", "metadata", {"generated", "url", "title", "status", "api", "count"}, {"metadata.generated", "metadata.url", "metadata.title", "metadata.status", "metadata.api", "metadata.count"}),
+    #"Changed Type" = Table.TransformColumnTypes(#"Expanded metadata",{{"type", type text}, {"metadata.generated", Int64.Type}, {"metadata.url", type text}, {"metadata.title", type text}, {"metadata.status", Int64.Type}, {"metadata.api", type date}, {"metadata.count", Int64.Type}, {"features", type any}, {"bbox", type any}}),
+    #"Removed Columns" = Table.RemoveColumns(#"Changed Type",{"bbox"}),
+    #"Expanded features" = Table.ExpandListColumn(#"Removed Columns", "features"),
+    #"Expanded features1" = Table.ExpandRecordColumn(#"Expanded features", "features", {"type", "properties", "geometry", "id"}, {"features.type", "features.properties", "features.geometry", "features.id"}),
+    #"Expanded features.properties" = Table.ExpandRecordColumn(#"Expanded features1", "features.properties", {"mag", "place", "time", "updated", "tz", "url", "detail", "felt", "cdi", "mmi", "alert", "status", "tsunami", "sig", "net", "code", "ids", "sources", "types", "nst", "dmin", "rms", "gap", "magType", "type", "title"}, {"features.properties.mag", "features.properties.place", "features.properties.time", "features.properties.updated", "features.properties.tz", "features.properties.url", "features.properties.detail", "features.properties.felt", "features.properties.cdi", "features.properties.mmi", "features.properties.alert", "features.properties.status", "features.properties.tsunami", "features.properties.sig", "features.properties.net", "features.properties.code", "features.properties.ids", "features.properties.sources", "features.properties.types", "features.properties.nst", "features.properties.dmin", "features.properties.rms", "features.properties.gap", "features.properties.magType", "features.properties.type", "features.properties.title"}),
+    #"Expanded features.geometry" = Table.ExpandRecordColumn(#"Expanded features.properties", "features.geometry", {"type", "coordinates"}, {"features.geometry.type", "features.geometry.coordinates"}),
+    #"Extracted Values" = Table.TransformColumns(#"Expanded features.geometry", {"features.geometry.coordinates", each Text.Combine(List.Transform(_, Text.From), ","), type text}),
+   
+    // In order to get Longitude and Latitude, I had to split the geometry field based on a comma delimited list and rename the fields appropriately.
+    #"Split Column by Delimiter" = Table.SplitColumn(#"Extracted Values", "features.geometry.coordinates", Splitter.SplitTextByDelimiter(",", QuoteStyle.Csv), {"features.geometry.coordinates.1", "features.geometry.coordinates.2", "features.geometry.coordinates.3"}),
+    #"Changed Type1" = Table.TransformColumnTypes(#"Split Column by Delimiter",{{"features.geometry.coordinates.1", type number}, {"features.geometry.coordinates.2", type number}, {"features.geometry.coordinates.3", type number}}),
+    #"Renamed Columns" = Table.RenameColumns(#"Changed Type1",{{"features.geometry.coordinates.1", "Longitude"}, {"features.geometry.coordinates.2", "Latitude"}, {"features.geometry.coordinates.3", "Depth"}, {"features.properties.title", "Title"}, {"features.properties.type", "EventType"}, {"features.properties.felt", "EventFeltPop"}, {"features.properties.place", "EventPlace"}, {"features.properties.mag", "Magnitude"}}),
+    #"Changed Type2" = Table.TransformColumnTypes(#"Renamed Columns",{{"Title", type text}, {"EventType", type text}, {"EventFeltPop", Int64.Type}, {"EventPlace", type text}, {"Magnitude", type number}, {"features.properties.time", Int64.Type}}),
+   
+    // In order to get the correct event date and time, I had to convert the provided duration in milliseconds to an actual date value by adding the duration to 1/1/1970
+    #"Added Custom" = Table.AddColumn(#"Changed Type2", "EventDateTime", each #datetime(1970,1,1,0,0,0) + #duration(0,0,0,[features.properties.time]/1000)),
+    #"Changed Type3" = Table.TransformColumnTypes(#"Added Custom",{{"EventDateTime", type datetime}}),
+    #"Inserted Date" = Table.AddColumn(#"Changed Type3", "Date", each DateTime.Date([EventDateTime]), type date),
+    #"Renamed Columns1" = Table.RenameColumns(#"Inserted Date",{{"Date", "EventDate"}}),
+    
+    // In order to evaluation the population of people that felt the earthquake I needed to convert null values to 0s
+    #"Replaced Value" = Table.ReplaceValue(#"Renamed Columns1",null,0,Replacer.ReplaceValue,{"EventFeltPop"}),
+    
+    // I added the # of people who felt the earthquake to the Title field to create an Event Details field with all the descriptive information
+    #"Added SignificantEarthquakesLast30" = Table.AddColumn(#"Replaced Value", "Event Details", each if Text.From([EventFeltPop]) = "1" then [Title] & " and was felt by " & Text.From([EventFeltPop]) & " person"
+        else [Title] & " and was felt by " & Text.From([EventFeltPop]) & " people")
+in
+    #"Added SignificantEarthquakesLast30"
